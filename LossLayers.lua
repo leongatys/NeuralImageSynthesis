@@ -4,11 +4,10 @@ require 'nn'
 -- Define an nn Module to compute content loss in-place
 local MSE, parent = torch.class('nn.MSE', 'nn.Module')
 
-function MSE:__init(strength, target, normalize)
+function MSE:__init(strength, target)
     parent.__init(self)
     self.strength = strength[1]
     self.target = target
-    self.normalize = normalize or false
     self.loss = 0
     self.crit = nn.MSECriterion()
 end
@@ -27,9 +26,6 @@ function MSE:updateGradInput(input, gradOutput)
     if input:nElement() == self.target:nElement() then
         self.gradInput = self.crit:backward(input, self.target)
     end
-    -- if self.normalize then
-    --     self.gradInput:div(torch.norm(self.gradInput, 1) + 1e-8)
-    -- end
     self.gradInput:mul(self.strength)
     self.gradInput:add(gradOutput)
     return self.gradInput
@@ -51,9 +47,8 @@ end
 -- Define an nn Module to compute style loss in-place
 local GramMSE, parent = torch.class('nn.GramMSE', 'nn.Module')
 
-function GramMSE:__init(strength, target, normalize) 
+function GramMSE:__init(strength, target)
     parent.__init(self)
-    self.normalize = normalize or false
     self.strength = strength[1]
     self.target = target
     self.loss = 0
@@ -75,9 +70,6 @@ function GramMSE:updateGradInput(input, gradOutput)
     local dG = self.crit:backward(self.G, self.target)
     dG:div(input:nElement())
     self.gradInput = self.gram:backward(input, dG)
-    -- if self.normalize then
-    --     self.gradInput:div(torch.norm(self.gradInput, 1) + 1e-8)
-    -- end
     self.gradInput:mul(self.strength)
     self.gradInput:add(gradOutput)
     return self.gradInput
@@ -95,11 +87,10 @@ end
 -- Define an nn Module to compute content loss in-place with linear transform
 local LinTransMSE, parent = torch.class('nn.LinTransMSE', 'nn.Module')
 
-function LinTransMSE:__init(strength, target, normalize, linear_transform)
+function LinTransMSE:__init(strength, target, linear_transform)
     parent.__init(self)
     self.strength = strength[1]
     self.target = target
-    self.normalize = normalize or false
     self.loss = 0
     self.linear_transform = linear_transform 
     self.trans_input = nil
@@ -122,9 +113,6 @@ function LinTransMSE:updateGradInput(input, gradOutput)
         local dtrans_input = self.crit:backward(self.trans_input, self.target)
         self.gradInput = self.linear_transform:backward(input, dtrans_input)
     end
-    -- if self.normalize then
-    --     self.gradInput:div(torch.norm(self.gradInput, 1) + 1e-8)
-    -- end
     self.gradInput:mul(self.strength)
     self.gradInput:add(gradOutput)
     return self.gradInput
@@ -133,9 +121,8 @@ end
 -- Define an nn Module to compute style loss in-place with linear transform
 local LinTransGramMSE, parent = torch.class('nn.LinTransGramMSE', 'nn.Module')
 
-function LinTransGramMSE:__init(strength, target, normalize, linear_transform)
+function LinTransGramMSE:__init(strength, target, linear_transform)
     parent.__init(self)
-    self.normalize = normalize or false
     self.strength = strength[1]
     self.target = target
     self.linear_transform = linear_transform 
@@ -161,9 +148,6 @@ function LinTransGramMSE:updateGradInput(input, gradOutput)
     dG:div(self.trans_input:nElement())
     local dtrans_input = self.gram:backward(self.trans_input, dG)
     self.gradInput = self.linear_transform:backward(self.trans_input, dtrans_input)
-    -- if self.normalize then
-    --     self.gradInput:div(torch.norm(self.gradInput, 1) + 1e-8)
-    -- end
     self.gradInput:mul(self.strength)
     self.gradInput:add(gradOutput)
     return self.gradInput
