@@ -59,7 +59,7 @@ end
 
 function GramMSE:updateOutput(input)
     self.G = self.gram:forward(input)
-    self.G:div(input:nElement())
+    self.G:div(input[{{1},{},{}}]:nElement())
     self.loss = self.crit:forward(self.G, self.target)
     self.loss = self.loss * self.strength
     self.output = input
@@ -68,7 +68,7 @@ end
 
 function GramMSE:updateGradInput(input, gradOutput)
     local dG = self.crit:backward(self.G, self.target)
-    dG:div(input:nElement())
+    dG:div(input[{{1},{},{}}]:nElement())
     self.gradInput = self.gram:backward(input, dG)
     self.gradInput:mul(self.strength)
     self.gradInput:add(gradOutput)
@@ -136,7 +136,7 @@ end
 function LinTransGramMSE:updateOutput(input)
     self.trans_input = self.linear_transform:forward(input)
     self.G = self.gram:forward(self.trans_input)
-    self.G:div(self.trans_input:nElement())
+    self.G:div(self.trans_input[{{1},{},{}}]:nElement())
     self.loss = self.crit:forward(self.G, self.target)
     self.loss = self.loss * self.strength
     self.output = input
@@ -145,7 +145,7 @@ end
 
 function LinTransGramMSE:updateGradInput(input, gradOutput)
     local dG = self.crit:backward(self.G, self.target)
-    dG:div(self.trans_input:nElement())
+    dG:div(self.trans_input[{{1},{},{}}]:nElement())
     local dtrans_input = self.gram:backward(self.trans_input, dG)
     self.gradInput = self.linear_transform:backward(self.trans_input, dtrans_input)
     self.gradInput:mul(self.strength)
