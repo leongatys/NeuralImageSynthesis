@@ -2,4 +2,7 @@
 *.sh
 Results/*
 Tmp/*
+Images/*
+Models/*
 Notebooks/.ipynb_checkpoints/
+network.lua
