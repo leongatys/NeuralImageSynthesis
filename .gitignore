@@ -1,0 +1,5 @@
+*.swp
+*.sh
+Results/*
+Tmp/*
+Notebooks/.ipynb_checkpoints/
