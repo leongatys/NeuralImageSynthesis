@@ -4,17 +4,20 @@ require 'nn'
 -- Define an nn Module to compute content loss in-place
 local MSE, parent = torch.class('nn.MSE', 'nn.Module')
 
-function MSE:__init(strength, target)
+function MSE:__init(targets, weights)
     parent.__init(self)
-    self.strength = strength[1]
-    self.target = target
+    self.targets = targets
+    self.weights = weights
     self.loss = 0
     self.crit = nn.MSECriterion()
 end
 
 function MSE:updateOutput(input)
-    if input:nElement() == self.target:nElement() then
-        self.loss = self.crit:forward(input, self.target) * self.strength
+    self.loss = 0
+    if input:nElement() == self.targets[{{1},{},{},{}}]:nElement() then
+        for t = 1, self.targets:size()[1] do
+            self.loss = self.loss + self.weights[t] * self.crit:forward(input, self.targets[t])
+        end
     else
         print('WARNING: Skipping content loss')
     end
@@ -23,10 +26,12 @@ function MSE:updateOutput(input)
 end
 
 function MSE:updateGradInput(input, gradOutput)
-    if input:nElement() == self.target:nElement() then
-        self.gradInput = self.crit:backward(input, self.target)
+    self.gradInput = input.new(#input):fill(0)
+    if input:nElement() == self.targets[{{1},{},{},{}}]:nElement() then
+        for t = 1, self.targets:size()[1] do
+            self.gradInput = self.gradInput + self.crit:backward(input, self.targets[t]):mul(self.weights[t])
+        end
     end
-    self.gradInput:mul(self.strength)
     self.gradInput:add(gradOutput)
     return self.gradInput
 end
@@ -47,10 +52,10 @@ end
 -- Define an nn Module to compute style loss in-place
 local GramMSE, parent = torch.class('nn.GramMSE', 'nn.Module')
 
-function GramMSE:__init(strength, target)
+function GramMSE:__init(targets, weights)
     parent.__init(self)
-    self.strength = strength[1]
-    self.target = target
+    self.targets = targets
+    self.weights = weights
     self.loss = 0
     self.gram = GramMatrix()
     self.G = nil
@@ -60,17 +65,21 @@ end
 function GramMSE:updateOutput(input)
     self.G = self.gram:forward(input)
     self.G:div(input[{{1},{},{}}]:nElement())
-    self.loss = self.crit:forward(self.G, self.target)
-    self.loss = self.loss * self.strength
+    self.loss = 0
+    for t = 1, self.targets:size()[1] do
+        self.loss = self.loss + self.weights[t] * self.crit:forward(self.G, self.targets[t])
+    end
     self.output = input
     return self.output
 end
 
 function GramMSE:updateGradInput(input, gradOutput)
-    local dG = self.crit:backward(self.G, self.target)
-    dG:div(input[{{1},{},{}}]:nElement())
-    self.gradInput = self.gram:backward(input, dG)
-    self.gradInput:mul(self.strength)
+    self.gradInput = input.new(#input):fill(0)
+    for t = 1, self.targets:size()[1] do
+        local dG = self.crit:backward(self.G, self.targets[t])
+        dG:div(input[{{1},{},{}}]:nElement())
+        self.gradInput = self.gradInput + self.gram:backward(input, dG):mul(self.weights[t])
+    end
     self.gradInput:add(gradOutput)
     return self.gradInput
 end
@@ -87,10 +96,10 @@ end
 -- Define an nn Module to compute content loss in-place with linear transform
 local LinTransMSE, parent = torch.class('nn.LinTransMSE', 'nn.Module')
 
-function LinTransMSE:__init(strength, target, linear_transform)
+function LinTransMSE:__init(targets, weights, linear_transform)
     parent.__init(self)
-    self.strength = strength[1]
-    self.target = target
+    self.targets = targets
+    self.weights = weights
     self.loss = 0
     self.linear_transform = linear_transform 
     self.trans_input = nil
@@ -98,9 +107,12 @@ function LinTransMSE:__init(strength, target, linear_transform)
 end
 
 function LinTransMSE:updateOutput(input)
-    if input[{{1},{},{}}]:nElement() == self.target[{{1},{},{}}]:nElement() then
+    if input[{{1},{1},{},{}}]:nElement() == self.targets[{{1},{1},{},{}}]:nElement() then
         self.trans_input = self.linear_transform:forward(input)
-        self.loss = self.crit:forward(self.trans_input, self.target) * self.strength
+        self.loss = 0
+        for t = 1, self.targets:size()[1] do
+            self.loss = self.loss + self.weights[t] * self.crit:forward(self.trans_input, self.targets[t])
+        end
     else
         print('WARNING: Skipping content loss')
     end
@@ -109,11 +121,13 @@ function LinTransMSE:updateOutput(input)
 end
 
 function LinTransMSE:updateGradInput(input, gradOutput)
-    if input[{{1},{},{}}]:nElement() == self.target[{{1},{},{}}]:nElement() then
+    if input[{{1},{1},{},{}}]:nElement() == self.targets[{{1},{1},{},{}}]:nElement() then
+        self.gradInput = input.new(#input):fill(0)
         local dtrans_input = self.crit:backward(self.trans_input, self.target)
-        self.gradInput = self.linear_transform:backward(input, dtrans_input)
+        for t = 1, self.targets:size()[1] do
+            self.gradInput = self.gradInput + self.linear_transform:backward(input, dtrans_input):mul(self.weights[t])
+        end
     end
-    self.gradInput:mul(self.strength)
     self.gradInput:add(gradOutput)
     return self.gradInput
 end
@@ -121,10 +135,10 @@ end
 -- Define an nn Module to compute style loss in-place with linear transform
 local LinTransGramMSE, parent = torch.class('nn.LinTransGramMSE', 'nn.Module')
 
-function LinTransGramMSE:__init(strength, target, linear_transform)
+function LinTransGramMSE:__init(targets, weights, linear_transform)
     parent.__init(self)
-    self.strength = strength[1]
-    self.target = target
+    self.targets = targets
+    self.weights = weights
     self.linear_transform = linear_transform 
     self.trans_input = nil
     self.loss = 0
@@ -137,18 +151,22 @@ function LinTransGramMSE:updateOutput(input)
     self.trans_input = self.linear_transform:forward(input)
     self.G = self.gram:forward(self.trans_input)
     self.G:div(self.trans_input[{{1},{},{}}]:nElement())
-    self.loss = self.crit:forward(self.G, self.target)
-    self.loss = self.loss * self.strength
+    self.loss = 0
+    for t = 1, self.targets:size()[1] do
+        self.loss = self.loss + self.weights[t] * self.crit:forward(self.G, self.targets[t])
+    end
     self.output = input
     return self.output
 end
 
 function LinTransGramMSE:updateGradInput(input, gradOutput)
-    local dG = self.crit:backward(self.G, self.target)
-    dG:div(self.trans_input[{{1},{},{}}]:nElement())
-    local dtrans_input = self.gram:backward(self.trans_input, dG)
-    self.gradInput = self.linear_transform:backward(self.trans_input, dtrans_input)
-    self.gradInput:mul(self.strength)
+    self.gradInput = input.new(#input):fill(0)
+    for t = 1, self.targets:size()[1] do
+        local dG = self.crit:backward(self.G, self.targets[t])
+        dG:div(self.trans_input[{{1},{},{}}]:nElement())
+        local dtrans_input = self.gram:backward(self.trans_input, dG)
+        self.gradInput = self.gradInput + self.linear_transform:backward(input, dG):mul(self.weights[t])
+    end
     self.gradInput:add(gradOutput)
     return self.gradInput
 end

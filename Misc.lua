@@ -36,9 +36,9 @@ end
 -- Function to get the appropriate loss module with arguments
 function get_loss_module(loss_layer, args, gpu)
     if loss_layer == 'MSE' then
-        return nn.MSE(args['weight'], args['target'], args['norm'])
+        return nn.MSE(args['targets'], args['weights']) 
     elseif loss_layer == 'GramMSE' then
-        return nn.GramMSE(args['weight'], args['target'], args['norm'])
+        return nn.GramMSE(args['targets'], args['weights'])
     end
 end
 
