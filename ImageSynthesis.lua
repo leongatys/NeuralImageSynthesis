@@ -26,6 +26,7 @@ cmd:option('-layer_order', 'none', 'order of layers to be used in maybe_print fu
 
 -- Output 
 cmd:option('-output_file', 'path/to/HDF5file', 'Name of the torch output file')
+cmd:option('-loss_file', 'path/to/HDF5file', 'Name of file in which the tracked loss is saved')
 
 local function main(params)
     -- Load auxillary functions
@@ -153,6 +154,13 @@ local function main(params)
     -- also save result if optimisation stops before max iter is reached
     if num_calls < params.max_iter then
         maybe_save(params.max_iter, params.save_iter, params.max_iter, params.output_file, img)
+    end
+
+    -- if given save the loss as tracked over the optimisation
+    if params.loss_file ~= 'path/to/HDF5file' then
+        local f = hdf5.open(params.loss_file, 'w')
+        f:write('losses', torch.Tensor(losses):double())
+        f:close()
     end
 end
 
