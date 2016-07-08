@@ -80,6 +80,10 @@ local function main(params)
         end
     else
         next_layer_ndx = 1
+        if 'data'  == layers[next_layer_ndx] then
+            f:write('data', images:double())
+            next_layer_ndx = next_layer_ndx + 1
+        end
         for i = 1, #net do
             if next_layer_ndx <= length(layers) then
                 local layer = net:get(i)

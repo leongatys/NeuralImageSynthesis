@@ -63,6 +63,18 @@ local function main(params)
     local net = nn.Sequential()
     local loss_modules = {}
     local next_layer_ndx = 1
+    -- Loss layers acting directly on the image
+    if opt_targets['data'] then
+        loss_modules['data'] = {}
+        for loss_layer, args in pairs(opt_targets['data']) do
+            local loss_module = get_loss_module(loss_layer, args, params.gpu)
+            loss_module = set_datatype(loss_module, params.gpu)
+            net:add(loss_module)
+            loss_modules['data'][loss_layer] = loss_module
+        end
+        next_layer_ndx = next_layer_ndx + 1
+    end
+    -- Loss layers acting on CNN features
     for i = 1, #cnn do
         if next_layer_ndx <= length(opt_targets) then
             local layer = cnn:get(i)
@@ -95,7 +107,6 @@ local function main(params)
     for i=1,#net.modules do
         local module = net.modules[i]
         if torch.type(module) == 'nn.SpatialConvolutionMM' then
-                -- remote these, not used, but uses gpu memory
                 module.gradWeight = nil
                 module.gradBias = nil
         end
@@ -151,12 +162,12 @@ local function main(params)
     print('Running optimization with L-BFGS')
     local x, losses = optim.lbfgs(feval, img, optim_state)
 
-    -- also save result if optimisation stops before max iter is reached
+    -- Also save result if optimisation stops before max iter is reached
     if num_calls < params.max_iter then
         maybe_save(params.max_iter, params.save_iter, params.max_iter, params.output_file, img)
     end
 
-    -- if given save the loss as tracked over the optimisation
+    -- Optionally save the loss as tracked over the optimisation
     if params.loss_file ~= 'path/to/HDF5file' then
         local f = hdf5.open(params.loss_file, 'w')
         f:write('losses', torch.Tensor(losses):double())
