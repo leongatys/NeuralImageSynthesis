@@ -39,6 +39,12 @@ function get_loss_module(loss_layer, args, gpu)
         return nn.MSE(args['targets'], args['weights']) 
     elseif loss_layer == 'GramMSE' then
         return nn.GramMSE(args['targets'], args['weights'])
+    elseif loss_layer == 'TVLoss' then
+        return nn.TVLoss(args['weight'])
+    elseif loss_layer == 'L1Penalty' then
+        return nn.L1Penalty(args['weight'][1], true)
+    elseif loss_layer == 'L2Penalty' then
+        return nn.L2Penalty(args['weight'][1], true)
     end
 end
 
