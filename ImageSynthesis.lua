@@ -67,7 +67,7 @@ local function main(params)
     if opt_targets['data'] then
         loss_modules['data'] = {}
         for loss_layer, args in pairs(opt_targets['data']) do
-            local loss_module = get_loss_module(loss_layer, args, params.gpu)
+            local loss_module = get_loss_module(loss_layer, args)
             loss_module = set_datatype(loss_module, params.gpu)
             net:add(loss_module)
             loss_modules['data'][loss_layer] = loss_module
@@ -84,7 +84,7 @@ local function main(params)
             if opt_targets[layer_name] then
                 loss_modules[layer_name] = {}
                 for loss_layer, args in pairs(opt_targets[layer_name]) do
-                    local loss_module = get_loss_module(loss_layer, args, params.gpu)
+                    local loss_module = get_loss_module(loss_layer, args)
                     loss_module = set_datatype(loss_module, params.gpu)
                     net:add(loss_module)
                     loss_modules[layer_name][loss_layer] = loss_module

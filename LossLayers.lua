@@ -52,10 +52,11 @@ end
 -- Define an nn Module to compute style loss in-place
 local GramMSE, parent = torch.class('nn.GramMSE', 'nn.Module')
 
-function GramMSE:__init(targets, weights)
+function GramMSE:__init(targets, weights, guiding_channels)
     parent.__init(self)
     self.targets = targets
     self.weights = weights
+    self.guidance = guiding_channels
     self.loss = 0
     self.gram = GramMatrix()
     self.G = nil
@@ -63,22 +64,36 @@ function GramMSE:__init(targets, weights)
 end
 
 function GramMSE:updateOutput(input)
+    local input_chan = input:size()[1]
+    if self.guidance then
+        input = torch.cat(input, self.guidance, 1)
+    end
     self.G = self.gram:forward(input)
     self.G:div(input[{{1},{},{}}]:nElement())
     self.loss = 0
     for t = 1, self.targets:size()[1] do
         self.loss = self.loss + self.weights[t] * self.crit:forward(self.G, self.targets[t])
     end
+    if self.guidance then
+        input = input[{{1,input_chan},{},{}}]
+    end
     self.output = input
     return self.output
 end
 
 function GramMSE:updateGradInput(input, gradOutput)
+    local input_chan = input:size()[1]
+    if self.guidance then
+        input = torch.cat(input, self.guidance, 1)
+    end
     self.gradInput = input.new(#input):fill(0)
     for t = 1, self.targets:size()[1] do
         local dG = self.crit:backward(self.G, self.targets[t])
         dG:div(input[{{1},{},{}}]:nElement())
         self.gradInput = self.gradInput + self.gram:backward(input, dG):mul(self.weights[t])
+    end
+    if self.guidance then
+        self.gradInput = self.gradInput[{{1,input_chan},{},{}}]
     end
     self.gradInput:add(gradOutput)
     return self.gradInput

@@ -34,11 +34,15 @@ function set_datatype(data, gpu)
 end
 
 -- Function to get the appropriate loss module with arguments
-function get_loss_module(loss_layer, args, gpu)
+function get_loss_module(loss_layer, args)
     if loss_layer == 'MSE' then
         return nn.MSE(args['targets'], args['weights']) 
     elseif loss_layer == 'GramMSE' then
-        return nn.GramMSE(args['targets'], args['weights'])
+        if args['guidance'] then
+            return nn.GramMSE(args['targets'], args['weights'], args['guidance'])
+        else
+            return nn.GramMSE(args['targets'], args['weights'])
+        end
     elseif loss_layer == 'TVLoss' then
         return nn.TVLoss(args['weight'])
     elseif loss_layer == 'L1Penalty' then
