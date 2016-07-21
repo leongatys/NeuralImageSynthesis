@@ -28,7 +28,7 @@ function set_datatype(data, gpu)
     if gpu >= 0 then
         data = data:cuda()
     else
-        data = data:float()
+        data = data:double()
     end
     return data
 end
