@@ -186,6 +186,65 @@ function LinTransGramMSE:updateGradInput(input, gradOutput)
     return self.gradInput
 end
 
+-- Define an nn Module to compute style loss with dilation in-place needs to get input from layer before conv_layer
+local GramMSEDilation, parent = torch.class('nn.GramMSEDilation', 'nn.Module')
+
+function GramMSEDilation:__init(targets, weights, conv_layer, dilation_value, guiding_channels)
+    parent.__init(self)
+    self.targets = targets
+    self.weights = weights
+    self.guidance = guiding_channels
+    self.dilation = nn.Sequential()
+    local n_in = conv_layer.nInputPlane 
+    local n_out = conv_layer.nOutputPlane 
+    local kW, kH, dW, dH =  conv_layer.kH, conv_layer.kW, conv_layer.dH, conv_layer.dW -- kernel size and stride
+    local d = dilation_value
+    local dl = nn.SpatialDilatedConvolution(n_in, n_out, kW, kH, dW, dH, d, d, d, d)
+    dl.weight = conv_layer.weight:clone()
+    dl.bias = conv_layer.bias:clone()
+    self.dilation:add(dl):add(nn.ReLU())
+    self.loss = 0
+    self.gram = GramMatrix()
+    self.G = nil
+    self.crit = nn.MSECriterion()
+end
+
+function GramMSEDilation:updateOutput(input)
+    local input_chan = input:size()[1]
+    local input_dilated = self.dilation:forward(input)
+    if self.guidance then
+        input_dilated = torch.cat(input_dilated, self.guidance, 1)
+    end
+    self.G = self.gram:forward(input_dilated)
+    self.G:div(input_dilated[{{1},{},{}}]:nElement())
+    self.loss = 0
+    for t = 1, self.targets:size()[1] do
+        self.loss = self.loss + self.weights[t] * self.crit:forward(self.G, self.targets[t])
+    end
+    self.output = input
+    return self.output
+end
+
+function GramMSEDilation:updateGradInput(input, gradOutput)
+    local input_chan = input:size()[1]
+    local input_dilated = self.dilation:forward(input)
+    if self.guidance then
+        input_dilated = torch.cat(input_dilated, self.guidance, 1)
+    end
+    local gradInputDilated = input_dilated.new(#input_dilated):fill(0)
+    for t = 1, self.targets:size()[1] do
+        local dG = self.crit:backward(self.G, self.targets[t])
+        dG:div(input_dilated[{{1},{},{}}]:nElement())
+        gradInputDilated = gradInputDilated + self.gram:backward(input_dilated, dG):mul(self.weights[t])
+    end
+    self.gradInput = self.dilation:backward(input, gradInputDilated)
+    if self.guidance then
+        self.gradInput = self.gradInput[{{1,input_chan},{},{}}]
+    end
+    self.gradInput:add(gradOutput)
+    return self.gradInput
+end
+
 
 local TVLoss, parent = torch.class('nn.TVLoss', 'nn.Module')
 

@@ -43,6 +43,18 @@ function get_loss_module(loss_layer, args)
         else
             return nn.GramMSE(args['targets'], args['weights'])
         end
+    elseif loss_layer == 'GramMSEDilation' then
+        local dilation_losses = {}
+        for i = 1, args['dilation']:size()[1] do
+            local weights = args['dilation_weights'][i] * args['weights']
+            local targets = args['targets'][{{i},{},{},{}}]
+            if args['guidance'] then
+                table.insert(dilation_losses, i, nn.GramMSEDilation(targets, weights, args['conv_layer'], args['dilation'][i], args['guidance']))
+            else
+                table.insert(dilation_losses, i, nn.GramMSEDilation(targets, weights, args['conv_layer'], args['dilation'][i]))
+            end
+        end
+        return dilation_losses
     elseif loss_layer == 'TVLoss' then
         return nn.TVLoss(args['weight'])
     elseif loss_layer == 'L1Penalty' then
@@ -61,7 +73,13 @@ function maybe_print(t, print_iter, max_iter, layer_order, loss_modules, loss)
             local layer_table = loss_modules[layer_name]
             print(layer_name)
             for loss_layer, loss_module in pairs(layer_table) do
-                print(string.format(loss_layer .. ' loss: %f', loss_module.loss))
+                if loss_layer == 'GramMSEDilation' then
+                    for _, dilation_module in pairs(loss_module) do
+                        print(string.format(loss_layer .. ' %i, loss: %f', dilation_module.dilation.modules[1].dilationW, dilation_module.loss))
+                    end
+                else
+                    print(string.format(loss_layer .. ' loss: %f', loss_module.loss))
+                end
             end
         end
         print(string.format('Total loss: %f', loss))

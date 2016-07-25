@@ -84,10 +84,20 @@ local function main(params)
             if opt_targets[layer_name] then
                 loss_modules[layer_name] = {}
                 for loss_layer, args in pairs(opt_targets[layer_name]) do
-                    local loss_module = get_loss_module(loss_layer, args)
-                    loss_module = set_datatype(loss_module, params.gpu)
-                    net:add(loss_module)
-                    loss_modules[layer_name][loss_layer] = loss_module
+                    if loss_layer == 'GramMSEDilation' then
+                        args['conv_layer'] = net.modules[#net.modules-1]
+                        local dilation_losses = get_loss_module(loss_layer, args)
+                        for i, dl in ipairs(dilation_losses) do 
+                            dl = set_datatype(dl, params.gpu)
+                            table.insert(net.modules, #net.modules-1, dl)
+                        end
+                        loss_modules[layer_name][loss_layer] = dilation_losses
+                    else
+                        local loss_module = get_loss_module(loss_layer, args)
+                        loss_module = set_datatype(loss_module, params.gpu)
+                        net:add(loss_module)
+                        loss_modules[layer_name][loss_layer] = loss_module
+                    end
                 end
                 next_layer_ndx = next_layer_ndx + 1
             end
@@ -98,10 +108,15 @@ local function main(params)
     local loss_modules_flat = {}
     for layer_name, layer_table in pairs(loss_modules) do
         for loss_layer, loss_module in pairs(layer_table) do
-            loss_modules_flat[#loss_modules_flat + 1] = loss_module
+            if loss_layer == 'GramMSEDilation' then
+                for _, dilation_module in pairs(loss_module) do
+                    loss_modules_flat[#loss_modules_flat + 1] = dilation_module
+                end
+            else
+                loss_modules_flat[#loss_modules_flat + 1] = loss_module
+            end
         end
     end
-
     -- We don't need the base CNN anymore, so clean it up to save memory.
     cnn = nil
     for i=1,#net.modules do
