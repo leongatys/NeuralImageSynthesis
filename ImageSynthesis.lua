@@ -13,6 +13,7 @@ cmd:option('-caffe_model', 'models/VGG_ILSVRC_19_layers.caffemodel')
 cmd:option('-input_file', 'path/to/HDF5file', 
 'Contains the targets for the activations of layers in the network that should be optimised for in order to synthesis an image')
 cmd:option('-init_file', 'path/to/HDF5file', 'Initialisation of the gradient procedure for image synthesis')
+cmd:option('-mask_file', 'path/to/HDF5file', 'Spatial mask to constrain the gradient descent to specific region')
 
 -- Options
 cmd:option('-gpu', 0, 'Zero-indexed ID of the GPU to use; for CPU mode set -gpu = -1')
@@ -134,6 +135,15 @@ local function main(params)
     f:close()
     img = set_datatype(img, params.gpu)
 
+    -- Load mask if specified
+    local mask = nil
+    if params.mask_file ~= 'path/to/HDF5file' then
+        local f = hdf5.open(params.mask_file, 'r')
+        mask = f:all()['mask']
+        f:close()
+        mask = set_datatype(mask, params.gpu)
+    end
+
     -- Run it through the network once to get the proper size for the gradient
     -- All the gradients will come from the extra loss modules, so we just pass
     -- zeros into the top of the net on the backward pass.
@@ -167,6 +177,10 @@ local function main(params)
         end
         maybe_print(num_calls, params.print_iter, params.max_iter, layer_order, loss_modules, loss)
         maybe_save(num_calls, params.save_iter, params.max_iter, params.output_file, img)
+
+        if mask then
+            grad[mask:repeatTensor(1,1,1):expandAs(grad)] = 0
+        end
 
         collectgarbage()
         -- optim.lbfgs expects a vector for gradients
