@@ -55,6 +55,8 @@ function get_loss_module(loss_layer, args)
             end
         end
         return dilation_losses
+    elseif loss_layer == 'GramMSEMasked' then
+        return nn.GramMSEMasked(args['targets'], args['weights'], args['masks'])
     elseif loss_layer == 'TVLoss' then
         return nn.TVLoss(args['weight'])
     elseif loss_layer == 'L1Penalty' then
