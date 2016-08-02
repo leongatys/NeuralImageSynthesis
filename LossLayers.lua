@@ -301,6 +301,42 @@ function GramMSEMasked:updateGradInput(input, gradOutput)
     return self.gradInput
 end
 
+-- Computes mean feature maps
+function MeanFM()
+    local net = nn.Sequential()
+    net:add(nn.View(-1):setNumInputDims(2))
+    net:add(nn.Mean(2))
+    return net
+end
+
+-- Define an nn Module to predict aesthetics from mean feature maps
+local MeanAesth, parent = torch.class('nn.MeanAesth', 'nn.Module')
+
+function MeanAesth:__init(weight, bias, strength)
+    parent.__init(self)
+    self.net = nn.Sequential()
+    self.net:add(MeanFM())
+    local LinTrans = nn.Linear(weight:size()[2], weight:size()[1])
+    LinTrans.weight = weight
+    LinTrans.bias = bias
+    self.net:add(LinTrans)
+    self.loss = 0
+    self.strength = strength
+end
+
+function MeanAesth:updateOutput(input)
+    self.loss =  -self.strength * self.net:forward(input)
+    self.output = input
+    return self.output
+end
+
+function MeanAesth:updateGradInput(input, gradOutput)
+    grad = input.new(1):fill(self.loss):sign()
+    self.gradInput = self.net:backward(input, grad:cmul(self.strength))
+    self.gradInput:add(gradOutput)
+    return self.gradInput
+end
+
 local TVLoss, parent = torch.class('nn.TVLoss', 'nn.Module')
 
 function TVLoss:__init(weight)

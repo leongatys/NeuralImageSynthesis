@@ -14,8 +14,7 @@ cmd:option('-input_file', 'path/to/HDF5file',
 'Contains the targets for the activations of layers in the network that should be optimised for in order to synthesis an image')
 cmd:option('-init_file', 'path/to/HDF5file', 'Initialisation of the gradient procedure for image synthesis')
 cmd:option('-mask_file', 'path/to/HDF5file', 'Spatial mask to constrain the gradient descent to specific region')
-cmd:option('-aesth_layers', 'relu1_1, relu2_1, relu3_1, relu4_1, relu5_1')
-cmd:option('-aesth_network', 'path/to/torchfile', 'network that takes mean feature maps of aesth_layers as input and predicts aesthetics')
+cmd:option('-aesth_input', 'path/to/HDF5file', 'file with aesthetics prediction weights for different layers')
 
 -- Options
 cmd:option('-gpu', 0, 'Zero-indexed ID of the GPU to use; for CPU mode set -gpu = -1')
@@ -62,13 +61,16 @@ local function main(params)
     local opt_targets = f:all()
     f:close()
 
-    -- Load aesthetics prediction network
-    local aesth_net = torch.load(params.aesth_network)
+    -- Load asethetics weights
+    local f = hdf5.open(params.aesth_input, 'r')
+    local aesth_args = f:all()
+    f:close()
 
     -- Set up new network with appropriate loss layers
     local net = nn.Sequential()
     local loss_modules = {}
     local next_layer_ndx = 1
+    local aesth_layer_ndx = 1
     -- Loss layers acting directly on the image
     if opt_targets['data'] then
         loss_modules['data'] = {}
@@ -82,7 +84,7 @@ local function main(params)
     end
     -- Loss layers acting on CNN features
     for i = 1, #cnn do
-        if next_layer_ndx <= length(opt_targets) then
+        if next_layer_ndx <= length(opt_targets) or aesth_layer_ndx <= length(aesth_args) then
             local layer = cnn:get(i)
             local layer_name = layer.name
             local layer_type = torch.type(layer)
@@ -105,8 +107,15 @@ local function main(params)
                         loss_modules[layer_name][loss_layer] = loss_module
                     end
                 end
-                net:add(nn.MeanMod())
                 next_layer_ndx = next_layer_ndx + 1
+            end
+            if aesth_args[layer_name] then
+                local loss_layer = 'MeanAesth'
+                local loss_module = get_loss_module(loss_layer, aesth_args[layer_name])
+                loss_module = set_datatype(loss_module, params.gpu)
+                net:add(loss_module)
+                loss_modules[layer_name][loss_layer] = loss_module
+                aesth_layer_ndx = aesth_layer_ndx + 1
             end
         end
     end
