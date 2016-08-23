@@ -15,6 +15,7 @@ cmd:option('-layers', 'all', 'layers for which to return the activations')
 -- Options
 cmd:option('-gpu', 0, 'Zero-indexed ID of the GPU to use; for CPU mode set -gpu = -1')
 cmd:option('-backend', 'nn', 'nn|cudnn')
+cmd:option('-reflectance', false, 'if true, use reflectance padding')
 
 -- Output 
 cmd:option('-output_file', 'path/to/HDF5file', 'Name of the torch output file containing the activations')
@@ -50,6 +51,9 @@ local function main(params)
     local layers = nil 
     if params.layers == 'all' then
         net = cnn:clone()
+        if params.reflectance then
+            print('Warning, no reflectance padding for layers "all"')
+        end
     else
         layers = params.layers:split(",")
         local next_layer_ndx = 1
@@ -57,6 +61,15 @@ local function main(params)
             if next_layer_ndx <= length(layers) then
                 local layer = cnn:get(i)
                 local layer_name = layer.name
+                local is_convolution = (layer_type == 'cudnn.SpatialConvolution' or layer_type == 'nn.SpatialConvolution')
+                if is_convolution and params.reflectance then
+                    local padW, padH = layer.padW, layer.padH
+                    local pad_layer = nn.SpatialReflectionPadding(padW, padW, padH, padH)
+                    pad_layer = set_datatype(pad_layer, params.gpu)
+                    net:add(pad_layer)
+                    layer.padW = 0
+                    layer.padH = 0
+                end
                 net:add(layer)
                 if layer_name == layers[next_layer_ndx] then
                     next_layer_ndx = next_layer_ndx + 1

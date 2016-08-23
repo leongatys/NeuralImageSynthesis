@@ -24,6 +24,7 @@ cmd:option('-seed', -1)
 cmd:option('-print_iter', 50)
 cmd:option('-save_iter', 100)
 cmd:option('-layer_order', 'none', 'order of layers to be used in maybe_print function')
+cmd:option('-reflectance', false, 'if true, use reflectance padding')
 
 -- Output 
 cmd:option('-output_file', 'path/to/HDF5file', 'Name of the torch output file')
@@ -81,6 +82,15 @@ local function main(params)
             local layer = cnn:get(i)
             local layer_name = layer.name
             local layer_type = torch.type(layer)
+            local is_convolution = (layer_type == 'cudnn.SpatialConvolution' or layer_type == 'nn.SpatialConvolution')
+            if is_convolution and params.reflectance then
+                local padW, padH = layer.padW, layer.padH
+                local pad_layer = nn.SpatialReflectionPadding(padW, padW, padH, padH)
+                pad_layer = set_datatype(pad_layer, params.gpu)
+                net:add(pad_layer)
+                layer.padW = 0
+                layer.padH = 0
+            end
             net:add(layer)
             if opt_targets[layer_name] then
                 loss_modules[layer_name] = {}
