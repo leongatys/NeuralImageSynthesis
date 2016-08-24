@@ -248,11 +248,6 @@ end
 -- Define an nn Module to compute style loss in-place and where the loss is only computed from a masked region in the feature map
 function GramMatrixMasked(input_chan)
     local net = nn.Sequential()
-    local parallel = nn.ParallelTable()
-    parallel:add(nn.View(-1):setNumInputDims(2))
-    parallel:add(nn.Identity())
-    net:add(parallel)
-    net:add(nn.MaskedSelect())
     local concat = nn.ConcatTable()
     concat:add(nn.View(input_chan,-1))
     concat:add(nn.View(input_chan,-1))
@@ -272,7 +267,7 @@ function GramMSEMasked:__init(targets, weights, masks)
     self.gram = {}
     for t = 1, self.targets:size()[1] do
         self.gram[t] = GramMatrixMasked(targets:size()[2])
-    end 
+    end
     self.G = {}
     self.crit = nn.MSECriterion()
 end
@@ -281,7 +276,7 @@ function GramMSEMasked:updateOutput(input)
     local input_chan = input:size()[1]
     self.loss = 0
     for t = 1, self.targets:size()[1] do
-        self.G[t] = self.gram[t]:forward({input, self.masks[t]:view(-1):repeatTensor(1,1):expandAs(input:view(input_chan,-1))})
+        self.G[t] = self.gram[t]:forward(input[self.masks[t]:repeatTensor(input_chan,1,1)])
         self.G[t]:div(self.masks[t]:sum())
         self.loss = self.loss + self.weights[t] * self.crit:forward(self.G[t], self.targets[t])
     end
@@ -295,7 +290,7 @@ function GramMSEMasked:updateGradInput(input, gradOutput)
     for t = 1, self.targets:size()[1] do
         local dG = self.crit:backward(self.G[t], self.targets[t])
         dG:div(self.masks[t]:sum())
-        self.gradInput = self.gradInput + self.gram[t]:backward({input, self.masks[t]:view(-1):repeatTensor(1,1):expandAs(input:view(input_chan,-1))}, dG)[1]:mul(self.weights[t])
+        self.gradInput[self.masks[t]:repeatTensor(input_chan,1,1)] = self.gradInput[self.masks[t]:repeatTensor(input_chan,1,1)] + self.gram[t]:backward(input[self.masks[t]:repeatTensor(input_chan,1,1)], dG):mul(self.weights[t])
     end
     self.gradInput:add(gradOutput)
     return self.gradInput
