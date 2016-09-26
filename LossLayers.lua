@@ -277,9 +277,11 @@ function GramMSEMasked:updateOutput(input)
     local input_chan = input:size()[1]
     self.loss = 0
     for t = 1, self.targets:size()[1] do
-        self.G[t] = self.gram[t]:forward({input, self.masks[t]:repeatTensor(input_chan,1,1)})
-        self.G[t]:div(self.masks[t]:sum())
-        self.loss = self.loss + self.weights[t] * self.crit:forward(self.G[t], self.targets[t])
+        if self.masks[t]:sum() > 0 then
+            self.G[t] = self.gram[t]:forward({input, self.masks[t]:repeatTensor(input_chan,1,1)})
+            self.G[t]:div(self.masks[t]:sum())
+            self.loss = self.loss + self.weights[t] * self.crit:forward(self.G[t], self.targets[t])
+        end
     end
     self.output = input
     return self.output
@@ -289,9 +291,12 @@ function GramMSEMasked:updateGradInput(input, gradOutput)
     local input_chan = input:size()[1]
     self.gradInput = input.new(#input):fill(0)
     for t = 1, self.targets:size()[1] do
-        local dG = self.crit:backward(self.G[t], self.targets[t])
-        dG:div(self.masks[t]:sum())
-        self.gradInput = self.gradInput + self.gram[t]:backward({input, self.masks[t]:repeatTensor(input_chan,1,1)}, dG)[1]:mul(self.weights[t])
+        local dG = nil
+        if self.masks[t]:sum() > 0 then
+            dG = self.crit:backward(self.G[t], self.targets[t])
+            dG:div(self.masks[t]:sum())
+            self.gradInput = self.gradInput + self.gram[t]:backward({input, self.masks[t]:repeatTensor(input_chan,1,1)}, dG)[1]:mul(self.weights[t])
+        end
     end
     self.gradInput:add(gradOutput)
     return self.gradInput
