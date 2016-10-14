@@ -246,7 +246,7 @@ function GramMSEDilation:updateGradInput(input, gradOutput)
 end
 
 -- Define an nn Module to compute style loss in-place and where the loss is only computed from a masked region in the feature map
-function GramMatrixMasked(input_chan)
+function GramMatrixGuided(input_chan)
     local net = nn.Sequential()
     net:add(nn.CMulTable())
     local concat = nn.ConcatTable()
@@ -257,29 +257,29 @@ function GramMatrixMasked(input_chan)
     return net
 end
 
-local GramMSEMasked, parent = torch.class('nn.GramMSEMasked', 'nn.Module')
+local GramMSEGuided, parent = torch.class('nn.GramMSEGuided', 'nn.Module')
 
-function GramMSEMasked:__init(targets, weights, masks)
+function GramMSEGuided:__init(targets, weights, guides)
     parent.__init(self)
     self.targets = targets
     self.weights = weights
-    self.masks = masks
+    self.guides = guides
     self.loss = 0
     self.gram = {}
     for t = 1, self.targets:size()[1] do
-        self.gram[t] = GramMatrixMasked(targets:size()[2])
+        self.gram[t] = GramMatrixGuided(targets:size()[2])
     end
     self.G = {}
     self.crit = nn.MSECriterion()
 end
 
-function GramMSEMasked:updateOutput(input)
+function GramMSEGuided:updateOutput(input)
     local input_chan = input:size()[1]
     self.loss = 0
     for t = 1, self.targets:size()[1] do
-        if self.masks[t]:sum() > 0 then
-            self.G[t] = self.gram[t]:forward({input, self.masks[t]:repeatTensor(input_chan,1,1)})
-            self.G[t]:div(self.masks[t]:sum())
+        if self.guides[t]:sum() > 0 then
+            self.G[t] = self.gram[t]:forward({input, self.guides[t]:repeatTensor(input_chan,1,1)})
+            self.G[t]:div(input[{{1},{},{}}]:nElement())
             self.loss = self.loss + self.weights[t] * self.crit:forward(self.G[t], self.targets[t])
         end
     end
@@ -287,15 +287,16 @@ function GramMSEMasked:updateOutput(input)
     return self.output
 end
 
-function GramMSEMasked:updateGradInput(input, gradOutput)
+function GramMSEGuided:updateGradInput(input, gradOutput)
     local input_chan = input:size()[1]
     self.gradInput = input.new(#input):fill(0)
     for t = 1, self.targets:size()[1] do
         local dG = nil
-        if self.masks[t]:sum() > 0 then
+        if self.guides[t]:sum() > 0 then
             dG = self.crit:backward(self.G[t], self.targets[t])
-            dG:div(self.masks[t]:sum())
-            self.gradInput = self.gradInput + self.gram[t]:backward({input, self.masks[t]:repeatTensor(input_chan,1,1)}, dG)[1]:mul(self.weights[t])
+            dG:div(input[{{1},{},{}}]:nElement())
+            self.gradInput = self.gradInput + self.gram[t]:backward({input, self.guides[t]:repeatTensor(input_chan,1,1)}, dG)[1]:mul(self.weights[t])
+            self.gram[t]:clearState()
         end
     end
     self.gradInput:add(gradOutput)
