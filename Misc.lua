@@ -57,6 +57,10 @@ function get_loss_module(loss_layer, args)
         return dilation_losses
     elseif loss_layer == 'GramMSEGuided' then
         return nn.GramMSEGuided(args['targets'], args['weights'], args['guides'])
+    elseif loss_layer == 'MeanMSE' then
+        return nn.MeanMSE(args['targets'], args['weights'])
+    elseif loss_layer == 'MeanMSEGuided' then
+        return nn.MeanMSEGuided(args['targets'], args['weights'], args['guides'])
     elseif loss_layer == 'MeanAesth' then
         return nn.MeanAesth(args['weight'], args['bias'], args['strength'])
     elseif loss_layer == 'TVLoss' then

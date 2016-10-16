@@ -311,6 +311,91 @@ function MeanFM()
     return net
 end
 
+-- Define an nn Module to compute mean feature style loss in-place
+local MeanMSE, parent = torch.class('nn.MeanMSE', 'nn.Module')
+
+function MeanMSE:__init(targets, weights)
+    parent.__init(self)
+    self.targets = targets
+    self.weights = weights
+    self.loss = 0
+    self.mean = MeanFM()
+    self.M = nil
+    self.crit = nn.MSECriterion()
+end
+
+function MeanMSE:updateOutput(input)
+    self.M = self.mean:forward(input)
+    self.loss = 0
+    for t = 1, self.targets:size()[1] do
+        self.loss = self.loss + self.weights[t] * self.crit:forward(self.M, self.targets[t])
+    end
+    self.output = input
+    return self.output
+end
+
+function MeanMSE:updateGradInput(input, gradOutput)
+    self.gradInput = input.new(#input):fill(0)
+    for t = 1, self.targets:size()[1] do
+        local dM = self.crit:backward(self.M, self.targets[t])
+        self.gradInput = self.gradInput + self.mean:backward(input, dM):mul(self.weights[t])
+    end
+    self.gradInput:add(gradOutput)
+    return self.gradInput
+end
+
+function MeanFMGuided()
+    local net = nn.Sequential()
+    net:add(nn.CMulTable())
+    net:add(nn.View(-1):setNumInputDims(2))
+    net:add(nn.Mean(2))
+    return net
+end
+
+local MeanMSEGuided, parent = torch.class('nn.MeanMSEGuided', 'nn.Module')
+
+function MeanMSEGuided:__init(targets, weights, guides)
+    parent.__init(self)
+    self.targets = targets
+    self.weights = weights
+    self.guides = guides
+    self.loss = 0
+    self.mean = {}
+    for t = 1, self.targets:size()[1] do
+        self.mean[t] = MeanFMGuided()
+    end
+    self.M = {}
+    self.crit = nn.MSECriterion()
+end
+
+function MeanMSEGuided:updateOutput(input)
+    local input_chan = input:size()[1]
+    self.loss = 0
+    for t = 1, self.targets:size()[1] do
+        if self.guides[t]:sum() > 0 then
+            self.M[t] = self.mean[t]:forward({input, self.guides[t]:repeatTensor(input_chan,1,1)})
+            self.loss = self.loss + self.weights[t] * self.crit:forward(self.M[t], self.targets[t])
+        end
+    end
+    self.output = input
+    return self.output
+end
+
+function MeanMSEGuided:updateGradInput(input, gradOutput)
+    local input_chan = input:size()[1]
+    self.gradInput = input.new(#input):fill(0)
+    for t = 1, self.targets:size()[1] do
+        local dM = nil
+        if self.guides[t]:sum() > 0 then
+            dM = self.crit:backward(self.M[t], self.targets[t])
+            self.gradInput = self.gradInput + self.mean[t]:backward({input, self.guides[t]:repeatTensor(input_chan,1,1)}, dM)[1]:mul(self.weights[t])
+            self.mean[t]:clearState()
+        end
+    end
+    self.gradInput:add(gradOutput)
+    return self.gradInput
+end
+
 -- Define an nn Module to predict aesthetics from mean feature maps
 local MeanAesth, parent = torch.class('nn.MeanAesth', 'nn.Module')
 
