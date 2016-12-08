@@ -245,6 +245,44 @@ function GramMSEDilation:updateGradInput(input, gradOutput)
     return self.gradInput
 end
 
+-- Define an nn Module to compute content loss in-place for guided regions
+local MSEGuided, parent = torch.class('nn.MSEGuided', 'nn.Module')
+
+function MSEGuided:__init(targets, weights, guides)
+    parent.__init(self)
+    self.targets = targets
+    self.weights = weights
+    self.guides = guides
+    self.loss = 0
+    self.crit = nn.MSECriterion()
+end
+
+function MSEGuided:updateOutput(input)
+    self.loss = 0
+    if input:nElement() == self.targets[{{1},{},{},{}}]:nElement() then
+        for t = 1, self.targets:size()[1] do
+            local guided_input = torch.cmul(input, self.guides)
+            self.loss = self.loss + self.weights[t] * self.crit:forward(guided_input, self.targets[t])
+        end
+    else
+        print('WARNING: Skipping content loss')
+    end
+    self.output = input
+    return self.output
+end
+
+function MSEGuided:updateGradInput(input, gradOutput)
+    self.gradInput = input.new(#input):fill(0)
+    if input:nElement() == self.targets[{{1},{},{},{}}]:nElement() then
+        for t = 1, self.targets:size()[1] do
+            local guided_input = torch.cmul(input, self.guides)
+            self.gradInput = self.gradInput + self.crit:backward(guided_input, self.targets[t]):mul(self.weights[t])
+        end
+    end
+    self.gradInput:add(gradOutput)
+    return self.gradInput
+end
+
 -- Define an nn Module to compute style loss in-place and where the loss is only computed from a masked region in the feature map
 function GramMatrixGuided(input_chan)
     local net = nn.Sequential()
