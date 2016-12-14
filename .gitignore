@@ -5,6 +5,7 @@ Tmp/*
 Images/*
 !Images/ControlPaper
 Models/*
+!Models/download_models.sh
 Notebooks/*
 ExampleNotebooks/.ipynb_checkpoints/
 network.lua
