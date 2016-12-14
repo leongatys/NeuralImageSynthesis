@@ -5,4 +5,5 @@ Tmp/*
 Images/*
 Models/*
 Notebooks/.ipynb_checkpoints/
+Notebooks/*
 network.lua
