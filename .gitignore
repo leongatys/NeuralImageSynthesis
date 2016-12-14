@@ -3,7 +3,8 @@
 Results/*
 Tmp/*
 Images/*
+!Images/ControlPaper
 Models/*
-Notebooks/.ipynb_checkpoints/
 Notebooks/*
+ExampleNotebooks/.ipynb_checkpoints/
 network.lua
