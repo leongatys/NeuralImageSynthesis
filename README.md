@@ -1,7 +1,11 @@
 # NeuralImageSynthesis
 Code to reproduce the results from the paper "***Controlling Perceptual Factors in Neural Style Transfer***" (https://arxiv.org/abs/1611.07865).
 The Jupyter Notebooks in the folder "ExampleNotebooks" give examples for all methods introduced in the paper. 
-To get started, have a look at the BasicStyleTransfer.ipynb Notebook, which implements the standard Neural Style Transfer from *Image Style Transfer Using Convolutional Neural Networks (CVPR 2016)*
+To get started, have a look at the BasicStyleTransfer.ipynb Notebook, which implements the standard Neural Style Transfer from *Image Style Transfer Using Convolutional Neural Networks (CVPR 2016)*.
+
+To run the Notebooks you will need to download the pretrained VGG models:
+
+`sh Models/download_models.sh`
 
 The code to reproduce the control results for Fast Neural Style Transfer (Fig. 6) can be found at https://github.com/leongatys/fast-neural-style 
 
